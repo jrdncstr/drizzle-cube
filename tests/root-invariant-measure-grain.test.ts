@@ -39,6 +39,8 @@ interface RootInvariantCubeOptions {
   childToFactCorrelation?: 'simple' | 'composite'
   /** true makes the fact cube declare `belongsTo` back to both the parent and the child. */
   factDeclaresBackReferences?: boolean
+  /** true prefers the parent-child-fact route that absorbs the child into the fact CTE. */
+  preferChildForFact?: boolean
 }
 
 function createRootInvariantCubes(
@@ -82,6 +84,7 @@ function createRootInvariantCubes(
       B: {
         targetCube: () => childCube,
         relationship: 'hasMany',
+        preferredFor: options.preferChildForFact ? ['C'] : undefined,
         on: [{ source: rootInvariantParents.identityKey, target: rootInvariantChildren.parentKey }]
       },
       C: {
@@ -710,6 +713,71 @@ describe.skipIf(skipRootInvariantFixture)('root-invariant measure grain', () => 
     const parentRooted = await compositeSemanticLayer.execute(parentRootedQuery, securityContext)
 
     expect(childRooted.data.every(row => row['B.id'] !== undefined)).toBe(true)
+    expect(withoutChildId(childRooted.data)).toEqual(expectedChildRows)
+    expect(withoutChildId(childRooted.data)).toEqual(sortRows(parentRooted.data))
+  })
+
+  test('a preferred absorbed route retains the selected child under the parent root', async () => {
+    const preferredRouteSemanticLayer = createSemanticLayer(
+      databaseExecutor,
+      createRootInvariantCubes(tables, 'A', { preferChildForFact: true })
+    )
+    const query: SemanticQuery = {
+      dimensions: ['A.name', 'B.name'],
+      measures: ['C.count', 'C.amountSum']
+    }
+    const securityContext = { organisationId: baselineOrganisationId }
+
+    const analysis = preferredRouteSemanticLayer.analyzeQuery(query, securityContext)
+    expect(analysis.primaryCube.selectedCube).toBe('A')
+
+    const dryRun = await preferredRouteSemanticLayer.dryRun(query, securityContext)
+    const { cte, outer } = splitPreAggregation(dryRun.sql)
+
+    expect(cte).toContain('root_invariant_children')
+    expect(outer).toContain('left join root_invariant_children')
+    expect(outer).toContain('root_invariant_children.simple_correlation_key')
+    expectNoOuterFactTableReference(dryRun.sql)
+
+    const childFilterQuery: SemanticQuery = {
+      ...query,
+      filters: [{ member: 'B.identityKey', operator: 'notEquals', values: ['child-2'] }]
+    }
+    const childFilterDryRun = await preferredRouteSemanticLayer.dryRun(
+      childFilterQuery,
+      securityContext
+    )
+    const childFilterSql = splitPreAggregation(childFilterDryRun.sql)
+    expect(childFilterSql.outer).toContain('root_invariant_children.identity_key <>')
+
+    const result = await preferredRouteSemanticLayer.execute(query, securityContext)
+    expect(sortRows(result.data)).toEqual(expectedChildRows)
+  })
+
+  test('a preferred absorbed route retains the selected child under the child root', async () => {
+    const preferredRouteSemanticLayer = createSemanticLayer(
+      databaseExecutor,
+      createRootInvariantCubes(tables, 'A', { preferChildForFact: true })
+    )
+    const parentRootedQuery: SemanticQuery = {
+      dimensions: ['A.name', 'B.name'],
+      measures: ['C.count', 'C.amountSum']
+    }
+    const childRootedQuery: SemanticQuery = {
+      dimensions: ['A.name', 'B.name', 'B.id'],
+      measures: ['C.count', 'C.amountSum']
+    }
+    const securityContext = { organisationId: baselineOrganisationId }
+
+    const analysis = preferredRouteSemanticLayer.analyzeQuery(childRootedQuery, securityContext)
+    expect(analysis.primaryCube.selectedCube).toBe('B')
+
+    const dryRun = await preferredRouteSemanticLayer.dryRun(childRootedQuery, securityContext)
+    expectNoOuterFactTableReference(dryRun.sql)
+
+    const childRooted = await preferredRouteSemanticLayer.execute(childRootedQuery, securityContext)
+    const parentRooted = await preferredRouteSemanticLayer.execute(parentRootedQuery, securityContext)
+
     expect(withoutChildId(childRooted.data)).toEqual(expectedChildRows)
     expect(withoutChildId(childRooted.data)).toEqual(sortRows(parentRooted.data))
   })

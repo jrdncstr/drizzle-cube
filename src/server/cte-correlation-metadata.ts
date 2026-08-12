@@ -40,6 +40,15 @@ export function readCTECorrelationMetadata(
   return (source as MetadataCarrier)[cteCorrelationMetadata] as CTECorrelationMetadata | undefined
 }
 
+export function isRetainedCorrelationCube(
+  cte: object,
+  cubeName: string
+): boolean {
+  return readCTECorrelationMetadata(cte)?.correlationSets.some(
+    correlationSet => correlationSet.cubeName === cubeName
+  ) ?? false
+}
+
 export function copyCTECorrelationMetadata(source: object, target: object): void {
   attachCTECorrelationMetadata(target, readCTECorrelationMetadata(source))
 }

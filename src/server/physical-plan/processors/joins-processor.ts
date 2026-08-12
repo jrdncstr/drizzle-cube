@@ -18,6 +18,7 @@ import type {
   PhysicalBuildDependencies,
   SelectionMap
 } from './shared.js'
+import { isRetainedCorrelationCube } from '../../cte-correlation-metadata.js'
 
 /**
  * Applies CTEs and JOIN graph construction to the query builder.
@@ -53,7 +54,11 @@ export function applyJoins(
       // Skip cubes that have been absorbed as intermediates into CTEs
       // UNLESS the cube has its own measures in the query (then it needs its own join)
       const cubeName = joinCube.cube.name
-      if (absorbedIntermediateCubes.has(cubeName) && !cteState.cteAliasMap.has(cubeName)) {
+      if (
+        absorbedIntermediateCubes.has(cubeName)
+        && !cteState.cteAliasMap.has(cubeName)
+        && !isRetainedByCTECorrelation(queryPlan, cubeName)
+      ) {
         // This cube was absorbed as an intermediate - the CTE handles the relationship
         continue
       }
@@ -122,6 +127,15 @@ function applyBaseJoins(
 }
 
 /** Collect cubes absorbed as intermediates into pre-aggregation CTEs. */
+function isRetainedByCTECorrelation(
+  queryPlan: PhysicalQueryPlan,
+  cubeName: string
+): boolean {
+  return queryPlan.preAggregationCTEs?.some(cte =>
+    isRetainedCorrelationCube(cte, cubeName)
+  ) ?? false
+}
+
 function collectAbsorbedIntermediateCubes(queryPlan: PhysicalQueryPlan): Set<string> {
   const absorbed = new Set<string>()
   if (queryPlan.preAggregationCTEs) {

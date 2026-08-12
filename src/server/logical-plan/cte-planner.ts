@@ -155,15 +155,24 @@ export class CTEPlanner {
       allAggregateMeasures
     )
 
-    const correlationMetadata = intermediateJoins && intermediateJoins.length > 0
-      ? undefined
-      : deriveCTECorrelationMetadata(
-          cubes,
-          cube,
-          query,
-          joinKeys,
-          this.resolverCache.get(cubes)
+    const derivedCorrelationMetadata = deriveCTECorrelationMetadata(
+      cubes,
+      cube,
+      query,
+      joinKeys,
+      this.resolverCache.get(cubes)
+    )
+    const absorbedIntermediateNames = new Set(
+      (intermediateJoins ?? []).map(intermediate => intermediate.cube.name)
+    )
+    const retainedCorrelationSets = intermediateJoins && intermediateJoins.length > 0
+      ? (derivedCorrelationMetadata?.correlationSets ?? []).filter(correlationSet =>
+          absorbedIntermediateNames.has(correlationSet.cubeName)
         )
+      : derivedCorrelationMetadata?.correlationSets
+    const correlationMetadata = retainedCorrelationSets && retainedCorrelationSets.length > 0
+      ? { correlationSets: retainedCorrelationSets }
+      : undefined
 
     // A grouping cube the CTE already correlates keeps its own outer join to the root.
     // Routing it through a declared back-reference instead would duplicate the
