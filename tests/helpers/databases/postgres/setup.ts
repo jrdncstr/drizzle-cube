@@ -10,7 +10,9 @@ import { enhancedDepartments, enhancedEmployees, enhancedTeams, enhancedEmployee
 
 const rootInvariantParentsData = [
   { identityKey: 'parent-1', name: 'a1', organisationId: 9101 },
-  { identityKey: 'parent-1', name: 'a1', organisationId: 9202 }
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9202 },
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9303 },
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9404 }
 ]
 
 const rootInvariantChildrenData = [
@@ -19,7 +21,16 @@ const rootInvariantChildrenData = [
   { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9101 },
   { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9202 },
   { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9202 },
-  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9202 }
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9202 },
+  // Equal-selected-value namespace: two children share the selected name, differ by identity.
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'shared', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9303 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'shared', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9303 },
+  // Composite-collision namespace: neither composite component alone identifies a child.
+  // A collides across b1/b2; B collides across b1/b3, so a single-component correlation
+  // associates at least one fact with the wrong child.
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'p', organisationId: 9404 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'q', organisationId: 9404 },
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'y', compositeCorrelationKeyB: 'p', organisationId: 9404 }
 ]
 
 const rootInvariantFactsData = [
@@ -32,7 +43,17 @@ const rootInvariantFactsData = [
   { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 2, organisationId: 9202 },
   { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 3, organisationId: 9202 },
   { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 4, organisationId: 9202 },
-  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 5, organisationId: 9202 }
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 5, organisationId: 9202 },
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 1, organisationId: 9303 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 2, organisationId: 9303 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 3, organisationId: 9303 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 4, organisationId: 9303 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 5, organisationId: 9303 },
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'p', amount: 1, organisationId: 9404 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'p', amount: 2, organisationId: 9404 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'p', amount: 3, organisationId: 9404 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'q', amount: 4, organisationId: 9404 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'x', compositeCorrelationKeyB: 'q', amount: 5, organisationId: 9404 }
 ]
 
 /**

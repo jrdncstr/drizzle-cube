@@ -155,8 +155,27 @@ export class CTEPlanner {
       allAggregateMeasures
     )
 
+    const correlationMetadata = intermediateJoins && intermediateJoins.length > 0
+      ? undefined
+      : deriveCTECorrelationMetadata(
+          cubes,
+          cube,
+          query,
+          joinKeys,
+          this.resolverCache.get(cubes)
+        )
+
+    // A grouping cube the CTE already correlates keeps its own outer join to the root.
+    // Routing it through a declared back-reference instead would duplicate the
+    // correlation and place its join condition before the CTE that condition reads.
+    const correlatedCubeNames = new Set(
+      (correlationMetadata?.correlationSets ?? []).map(correlationSet => correlationSet.cubeName)
+    )
+
     // Detect downstream cubes that need join keys in the CTE
-    const downstreamJoinKeys = this.findDownstreamJoinKeys(cube, query, cubes)
+    const downstreamJoinKeys = this
+      .findDownstreamJoinKeys(cube, query, cubes)
+      .filter(downstream => !correlatedCubeNames.has(downstream.targetCubeName))
 
     const cte = {
       cube,
@@ -171,15 +190,6 @@ export class CTEPlanner {
       cteReason
     }
 
-    const correlationMetadata = intermediateJoins && intermediateJoins.length > 0
-      ? undefined
-      : deriveCTECorrelationMetadata(
-          cubes,
-          cube,
-          query,
-          joinKeys,
-          this.resolverCache.get(cubes)
-        )
     attachCTECorrelationMetadata(cte, correlationMetadata)
 
     return cte
