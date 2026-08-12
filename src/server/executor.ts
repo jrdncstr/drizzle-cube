@@ -43,8 +43,19 @@ import { FunnelQueryBuilder } from './builders/funnel-query-builder.js'
 import { FlowQueryBuilder } from './builders/flow-query-builder.js'
 import { RetentionQueryBuilder } from './builders/retention-query-builder.js'
 import { LogicalPlanBuilder, IdentityOptimiser } from './logical-plan/index.js'
-import type { PlanOptimiser, OptimiserEngineType, QueryNode } from './logical-plan/index.js'
+import type {
+  LogicalNode,
+  PlanOptimiser,
+  OptimiserEngineType,
+  QueryNode
+} from './logical-plan/index.js'
 import { DrizzlePlanBuilder } from './physical-plan/index.js'
+import {
+  attachCTECorrelationMetadata,
+  deriveCTECorrelationMetadata,
+  orderJoinsForCTECorrelations
+} from './cte-correlation-metadata.js'
+import { ResolverCache } from './logical-plan/planner-utils.js'
 import { t } from '../i18n/runtime.js'
 import type { TranslationKey } from '../i18n/types.js'
 
@@ -629,10 +640,71 @@ export class QueryExecutor {
     const optimised = this.planOptimiser.optimise(planning.plan, {
       engineType: this.getOptimiserEngineType()
     }) as QueryNode
+    this.restoreOptimisedCTECorrelationMetadata(cubes, optimised)
     return {
       logicalPlan: planning.plan,
       analysis: planning.analysis,
       optimisedPlan: optimised
+    }
+  }
+
+  private restoreOptimisedCTECorrelationMetadata(
+    cubes: Map<string, Cube>,
+    plan: QueryNode
+  ): void {
+    if (!this.hasCorrelationCTE(plan)) return
+
+    const resolver = new ResolverCache().get(cubes)
+
+    const restore = (node: LogicalNode, query: SemanticQuery): void => {
+      switch (node.type) {
+        case 'query':
+          restore(node.source, this.drizzlePlanBuilder.toSemanticQuery(node))
+          return
+        case 'simpleSource':
+          for (const cte of node.ctes) {
+            attachCTECorrelationMetadata(
+              cte,
+              cte.intermediateJoins && cte.intermediateJoins.length > 0
+                ? undefined
+                : deriveCTECorrelationMetadata(cubes, cte.cube.cube, query, cte.joinKeys, resolver)
+            )
+          }
+          node.joins = orderJoinsForCTECorrelations(node.joins, node.ctes)
+          return
+        case 'keysDeduplication':
+          restore(node.keysSource, query)
+          restore(node.measureSource, query)
+          return
+        case 'multiFactMerge':
+          for (const group of node.groups) restore(group, query)
+          return
+        case 'fullKeyAggregate':
+          for (const subquery of node.subqueries) restore(subquery, query)
+          return
+        case 'ctePreAggregate':
+          return
+      }
+    }
+
+    restore(plan, this.drizzlePlanBuilder.toSemanticQuery(plan))
+  }
+
+  private hasCorrelationCTE(plan: LogicalNode): boolean {
+    switch (plan.type) {
+      case 'query':
+        return this.hasCorrelationCTE(plan.source)
+      case 'simpleSource':
+        return plan.ctes.some(cte => !cte.intermediateJoins?.length)
+      case 'keysDeduplication':
+        return this.hasCorrelationCTE(plan.keysSource)
+          || this.hasCorrelationCTE(plan.measureSource)
+      case 'multiFactMerge':
+        return plan.groups.some(group => this.hasCorrelationCTE(group))
+      case 'fullKeyAggregate':
+        return plan.subqueries.some(subquery => this.hasCorrelationCTE(subquery))
+      case 'ctePreAggregate':
+        return false
     }
   }
 

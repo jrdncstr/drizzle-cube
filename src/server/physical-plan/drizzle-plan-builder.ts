@@ -21,6 +21,7 @@ import {
   buildRegularJoinCondition,
   expandBelongsToManyJoin
 } from '../cube-utils.js'
+import { copyCTECorrelationMetadata } from '../cte-correlation-metadata.js'
 import {
   buildCTEState,
   buildModifiedSelections,
@@ -63,18 +64,22 @@ export class DrizzlePlanBuilder {
     return {
       primaryCube: simpleSource.primaryCube.cube,
       joinCubes: simpleSource.joins.map(join => this.materializeJoin(join)),
-      preAggregationCTEs: simpleSource.ctes.map(cte => ({
-        cube: cte.cube.cube,
-        alias: cte.alias,
-        cteAlias: cte.cteAlias,
-        joinKeys: cte.joinKeys,
-        measures: cte.measures,
-        propagatingFilters: cte.propagatingFilters,
-        downstreamJoinKeys: cte.downstreamJoinKeys,
-        intermediateJoins: cte.intermediateJoins,
-        cteType: cte.cteType,
-        cteReason: cte.cteReason
-      })),
+      preAggregationCTEs: simpleSource.ctes.map(cte => {
+        const physicalCte = {
+          cube: cte.cube.cube,
+          alias: cte.alias,
+          cteAlias: cte.cteAlias,
+          joinKeys: cte.joinKeys,
+          measures: cte.measures,
+          propagatingFilters: cte.propagatingFilters,
+          downstreamJoinKeys: cte.downstreamJoinKeys,
+          intermediateJoins: cte.intermediateJoins,
+          cteType: cte.cteType,
+          cteReason: cte.cteReason
+        }
+        copyCTECorrelationMetadata(cte, physicalCte)
+        return physicalCte
+      }),
       keysDeduplication: keysDeduplicationMeta,
       warnings: plan.warnings.length > 0 ? plan.warnings : undefined
     }

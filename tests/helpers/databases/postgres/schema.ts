@@ -143,6 +143,36 @@ export const inventory = pgTable('inventory', {
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow()
 })
 
+// Root-invariant measure-grain fixture tables
+export const rootInvariantParents = pgTable('root_invariant_parents', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  identityKey: text('identity_key').notNull(),
+  name: text('name').notNull(),
+  organisationId: integer('organisation_id').notNull()
+})
+
+export const rootInvariantChildren = pgTable('root_invariant_children', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  identityKey: text('identity_key').notNull(),
+  parentKey: text('parent_key').notNull(),
+  name: text('name').notNull(),
+  simpleCorrelationKey: text('simple_correlation_key').notNull(),
+  compositeCorrelationKeyA: text('composite_correlation_key_a').notNull(),
+  compositeCorrelationKeyB: text('composite_correlation_key_b').notNull(),
+  organisationId: integer('organisation_id').notNull()
+})
+
+export const rootInvariantFacts = pgTable('root_invariant_facts', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  identityKey: text('identity_key').notNull(),
+  parentKey: text('parent_key').notNull(),
+  childCorrelationKey: text('child_correlation_key').notNull(),
+  compositeCorrelationKeyA: text('composite_correlation_key_a').notNull(),
+  compositeCorrelationKeyB: text('composite_correlation_key_b').notNull(),
+  amount: real('amount').notNull(),
+  organisationId: integer('organisation_id').notNull()
+})
+
 // Define relations for better type inference
 export const employeesRelations = relations(employees, ({ one, many }) => ({
   department: one(departments, {
@@ -208,6 +238,9 @@ export const testSchema = {
   products,
   sales,
   inventory,
+  rootInvariantParents,
+  rootInvariantChildren,
+  rootInvariantFacts,
   employeesRelations,
   departmentsRelations,
   productivityRelations,

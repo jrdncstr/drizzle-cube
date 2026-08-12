@@ -2,14 +2,18 @@
  * Tests for LogicalPlanner join functionality with new array-based joins
  * Tests JoinPathResolver.buildJoinCondition() method
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { eq, gte } from 'drizzle-orm'
+import { integer, sqliteTable } from 'drizzle-orm/sqlite-core'
 import { LogicalPlanner } from '../src/server/logical-plan/logical-planner'
 import { JoinPathResolver } from '../src/server/resolvers/join-path-resolver'
 import { LogicalPlanBuilder } from '../src/server/logical-plan'
 import { getTestSchema } from './helpers/test-database'
 import { createTestCubesForCurrentDatabase, getTestCubes } from './helpers/test-cubes'
-import type { QueryContext, CubeJoin, Cube } from '../src/server/types'
+import type { QueryContext, CubeJoin, Cube, SemanticQuery } from '../src/server/types'
+import type { JoinRef } from '../src/server/logical-plan/types'
+import { attachCTECorrelationMetadata } from '../src/server/cte-correlation-metadata'
+import { defineCube } from '../src/server/cube-utils'
 
 describe('LogicalPlanner - New Join System', () => {
   let schema: any
@@ -226,6 +230,106 @@ describe('LogicalPlanner - New Join System', () => {
       expect(typeof schema.productivity.employeeId.name).toBe('string')
       expect(typeof schema.employees.id.name).toBe('string')
       
+    })
+  })
+
+  describe('CTE correlation join ordering', () => {
+    it('stably orders transitive dependencies and all ready joins', () => {
+      const createCube = (name: string): Cube => {
+        const table = sqliteTable(`${name.toLowerCase()}_ordering`, {
+          id: integer('id').notNull()
+        })
+        return defineCube(name, {
+          sql: () => ({ from: table }),
+          dimensions: {
+            id: { name: 'id', type: 'number', sql: table.id }
+          },
+          measures: {
+            count: { name: 'count', type: 'count', sql: table.id }
+          }
+        })
+      }
+      const primary = createCube('Primary')
+      const retainedA = createCube('A')
+      const retainedB = createCube('B')
+      const dependentC = createCube('C')
+      const dependentF = createCube('F')
+      const unrelated = createCube('U')
+      const cubes = new Map([
+        ['Primary', primary],
+        ['A', retainedA],
+        ['B', retainedB],
+        ['C', dependentC],
+        ['F', dependentF],
+        ['U', unrelated]
+      ])
+      const join = (cube: Cube): JoinRef => ({
+        target: { name: cube.name, cube },
+        alias: cube.name.toLowerCase(),
+        joinType: 'left',
+        joinDef: { targetCube: cube, relationship: 'hasMany', on: [] },
+        relationship: 'hasMany'
+      })
+      const originalJoins = [
+        join(dependentF),
+        join(dependentC),
+        join(retainedB),
+        join(retainedA),
+        join(unrelated)
+      ]
+      const cte = (cube: Cube, predecessor: string) => {
+        const info = {
+          cube,
+          alias: cube.name.toLowerCase(),
+          cteAlias: `${cube.name.toLowerCase()}_agg`,
+          joinKeys: [],
+          measures: [`${cube.name}.count`],
+          cteType: 'aggregate' as const,
+          cteReason: 'hasMany' as const
+        }
+        attachCTECorrelationMetadata(info, {
+          correlationSets: [{ cubeName: predecessor, joinKeys: [] }]
+        })
+        return info
+      }
+      const preAggregationCTEs = [
+        cte(retainedB, 'A'),
+        cte(dependentC, 'B'),
+        cte(dependentF, 'B')
+      ]
+      const query: SemanticQuery = {
+        dimensions: ['A.id', 'B.id', 'U.id'],
+        measures: ['C.count', 'F.count']
+      }
+      const plannerStub = {
+        analyzeCubeUsage: vi.fn(() => new Set(['Primary', 'A', 'B', 'C', 'F', 'U'])),
+        analyzePrimaryCube: vi.fn(() => ({
+          selectedCube: 'Primary',
+          reason: 'most_connected',
+          explanation: 'test root'
+        })),
+        analyzeJoinPathForTarget: vi.fn((availableCubes: Map<string, Cube>, from: string, to: string) => ({
+          targetCube: to,
+          pathFound: true,
+          path: [],
+          pathLength: 0
+        })),
+        buildJoinPlanForPrimary: vi.fn(() => originalJoins),
+        buildPreAggregationCTEs: vi.fn(() => preAggregationCTEs),
+        buildWarnings: vi.fn(() => [])
+      } as unknown as LogicalPlanner
+
+      const plan = new LogicalPlanBuilder(plannerStub).plan(cubes, query, context)
+      expect(plan.source.type).toBe('simpleSource')
+      if (plan.source.type !== 'simpleSource') return
+
+      expect(plan.source.joins.map(plannedJoin => plannedJoin.target.name)).toEqual([
+        'A',
+        'B',
+        'F',
+        'C',
+        'U'
+      ])
     })
   })
 

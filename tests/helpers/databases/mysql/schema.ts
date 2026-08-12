@@ -121,6 +121,36 @@ export const inventory = mysqlTable('inventory', {
   createdAt: timestamp('created_at').defaultNow()
 })
 
+// Root-invariant measure-grain fixture tables
+export const rootInvariantParents = mysqlTable('root_invariant_parents', {
+  id: int('id').primaryKey().autoincrement(),
+  identityKey: varchar('identity_key', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  organisationId: int('organisation_id').notNull()
+})
+
+export const rootInvariantChildren = mysqlTable('root_invariant_children', {
+  id: int('id').primaryKey().autoincrement(),
+  identityKey: varchar('identity_key', { length: 255 }).notNull(),
+  parentKey: varchar('parent_key', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  simpleCorrelationKey: varchar('simple_correlation_key', { length: 255 }).notNull(),
+  compositeCorrelationKeyA: varchar('composite_correlation_key_a', { length: 255 }).notNull(),
+  compositeCorrelationKeyB: varchar('composite_correlation_key_b', { length: 255 }).notNull(),
+  organisationId: int('organisation_id').notNull()
+})
+
+export const rootInvariantFacts = mysqlTable('root_invariant_facts', {
+  id: int('id').primaryKey().autoincrement(),
+  identityKey: varchar('identity_key', { length: 255 }).notNull(),
+  parentKey: varchar('parent_key', { length: 255 }).notNull(),
+  childCorrelationKey: varchar('child_correlation_key', { length: 255 }).notNull(),
+  compositeCorrelationKeyA: varchar('composite_correlation_key_a', { length: 255 }).notNull(),
+  compositeCorrelationKeyB: varchar('composite_correlation_key_b', { length: 255 }).notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  organisationId: int('organisation_id').notNull()
+})
+
 // Relations (same as PostgreSQL schema)
 export const employeesRelations = relations(employees, ({ one, many }) => ({
   department: one(departments, {
@@ -186,6 +216,9 @@ export const mysqlTestSchema = {
   products,
   sales,
   inventory,
+  rootInvariantParents,
+  rootInvariantChildren,
+  rootInvariantFacts,
   employeesRelations,
   departmentsRelations,
   productivityRelations,

@@ -21,6 +21,10 @@ import { hasPostAggregationWindows } from '../measure-classification.js'
 import { resolveCubeReference } from '../cube-utils.js'
 import { t } from '../../i18n/runtime.js'
 import {
+  copyCTECorrelationMetadata,
+  orderJoinsForCTECorrelations
+} from '../cte-correlation-metadata.js'
+import {
   buildMeasureRefs,
   buildDimensionRefs,
   buildTimeDimensionRefs,
@@ -110,12 +114,13 @@ export class LogicalPlanBuilder {
       cubeNames.length > 1
         ? (this.queryPlanner.buildPreAggregationCTEs(cubes, primaryCube, joinCubes, query, ctx) ?? [])
         : []
+    const orderedJoinCubes = orderJoinsForCTECorrelations(joinCubes, preAggregationCTEs)
 
     const warnings = this.queryPlanner.buildWarnings(query, preAggregationCTEs)
 
     const sourceBuild = this.buildSourceFromPhases(
       primaryCube,
-      joinCubes,
+      orderedJoinCubes,
       preAggregationCTEs,
       cubes,
       query,
@@ -301,7 +306,7 @@ export class LogicalPlanBuilder {
     // Convert pre-aggregation CTEs
     const ctes: CTEPreAggregate[] = preAggregationCTEs.map(cteInfo => {
       const cubeRef = toCubeRef(cteInfo.cube)
-      return {
+      const cte: CTEPreAggregate = {
         type: 'ctePreAggregate' as const,
         schema: buildCTESchema(cteInfo, cubes),
         cube: cubeRef,
@@ -315,6 +320,8 @@ export class LogicalPlanBuilder {
         cteType: cteInfo.cteType ?? 'aggregate',
         cteReason: cteInfo.cteReason ?? 'hasMany'
       }
+      copyCTECorrelationMetadata(cteInfo, cte)
+      return cte
     })
 
     // Build source schema

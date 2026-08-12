@@ -38,7 +38,10 @@ export async function getTestSchema() {
       employeeTeams,
       products,
       sales,
-      inventory
+      inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts
     } = await import('./databases/mysql/schema')
 
     return {
@@ -53,6 +56,9 @@ export async function getTestSchema() {
       products,
       sales,
       inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts,
       type: 'MySQLTestSchema' as const,
       // Database-specific value helpers
       dbTrue: true,
@@ -71,7 +77,10 @@ export async function getTestSchema() {
       employeeTeams,
       products,
       sales,
-      inventory
+      inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts
     } = await import('./databases/sqlite/schema')
 
     return {
@@ -86,6 +95,9 @@ export async function getTestSchema() {
       products,
       sales,
       inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts,
       type: 'SQLiteTestSchema' as const,
       // Database-specific value helpers for SQLite
       dbTrue: 1,
@@ -203,7 +215,10 @@ export async function getTestSchema() {
       employeeTeams,
       products,
       sales,
-      inventory
+      inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts
     } = await import('./databases/postgres/schema')
 
     return {
@@ -218,6 +233,9 @@ export async function getTestSchema() {
       products,
       sales,
       inventory,
+      rootInvariantParents,
+      rootInvariantChildren,
+      rootInvariantFacts,
       type: 'TestSchema' as const,
       // Database-specific value helpers
       dbTrue: true,

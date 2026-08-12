@@ -5,8 +5,35 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import Database from 'better-sqlite3'
-import { sqliteTestSchema, employees, departments, productivity, timeEntries, analyticsPages, teams, employeeTeams, products, sales, inventory } from './schema'
+import { sqliteTestSchema, employees, departments, productivity, timeEntries, analyticsPages, teams, employeeTeams, products, sales, inventory, rootInvariantParents, rootInvariantChildren, rootInvariantFacts } from './schema'
 import { enhancedDepartments, enhancedEmployees, enhancedTeams, enhancedEmployeeTeams, generateComprehensiveProductivityData, generateComprehensiveTimeEntriesData, enhancedProducts, enhancedSales, enhancedInventory } from '../../enhanced-test-data'
+
+const rootInvariantParentsData = [
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9101 },
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9202 }
+]
+
+const rootInvariantChildrenData = [
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9101 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9101 },
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9101 },
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9202 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9202 },
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9202 }
+]
+
+const rootInvariantFactsData = [
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 1, organisationId: 9101 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 2, organisationId: 9101 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 3, organisationId: 9101 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 4, organisationId: 9101 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 5, organisationId: 9101 },
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 1, organisationId: 9202 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 2, organisationId: 9202 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: 3, organisationId: 9202 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 4, organisationId: 9202 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: 5, organisationId: 9202 }
+]
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -202,7 +229,20 @@ export async function setupSQLiteTestData(db: ReturnType<typeof drizzle>) {
   // Insert inventory (fact table #2)
   await db.insert(inventory).values(updatedInventory)
 
+  await reseedSQLiteRootInvariantFixture(db)
+
   console.log('Star schema test data inserted successfully')
+}
+
+export async function reseedSQLiteRootInvariantFixture(db: ReturnType<typeof drizzle>) {
+  db.transaction(transaction => {
+    transaction.delete(rootInvariantFacts).run()
+    transaction.delete(rootInvariantChildren).run()
+    transaction.delete(rootInvariantParents).run()
+    transaction.insert(rootInvariantParents).values(rootInvariantParentsData).run()
+    transaction.insert(rootInvariantChildren).values(rootInvariantChildrenData).run()
+    transaction.insert(rootInvariantFacts).values(rootInvariantFactsData).run()
+  })
 }
 
 /**

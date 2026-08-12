@@ -19,6 +19,7 @@ import type {
 } from '../types/index.js'
 
 import { resolveSqlExpression } from '../cube-utils.js'
+import { readCTECorrelationMetadata } from '../cte-correlation-metadata.js'
 import type { DrizzleSqlBuilder } from '../physical-plan/drizzle-sql-builder.js'
 
 /**
@@ -149,6 +150,7 @@ export class CTEBuilder {
     const cteSelections: Record<string, any> = {}
 
     this.addJoinKeySelections(cteSelections, cteInfo, cube, hasIntermediateJoins)
+    this.addCorrelationKeySelections(cteSelections, cteInfo)
     this.addDownstreamKeySelections(cteSelections, cteInfo)
     this.addMeasureSelections(cteSelections, cteInfo, cube, context)
     this.addDimensionSelections(cteSelections, cube, query, context)
@@ -183,6 +185,20 @@ export class CTEBuilder {
       for (const [dimName, dimension] of Object.entries(cube.dimensions || {}) as Array<[string, any]>) {
         if (dimension.sql === joinKey.targetColumnObj && dimName !== joinKey.targetColumn) {
           cteSelections[dimName] = sql`${joinKey.targetColumnObj}`.as(dimName) as unknown as any
+        }
+      }
+    }
+  }
+
+  /** Add private child-correlation columns to the CTE SELECT. */
+  private addCorrelationKeySelections(
+    cteSelections: Record<string, any>,
+    cteInfo: CTEInfo
+  ): void {
+    for (const correlationSet of readCTECorrelationMetadata(cteInfo)?.correlationSets ?? []) {
+      for (const joinKey of correlationSet.joinKeys) {
+        if (joinKey.targetColumnObj) {
+          cteSelections[joinKey.targetColumn] = joinKey.targetColumnObj
         }
       }
     }
@@ -406,6 +422,7 @@ export class CTEBuilder {
     }
 
     this.addJoinKeyGroupBy(addGroupByField, cteInfo, hasIntermediateJoins)
+    this.addCorrelationKeyGroupBy(addGroupByField, cteInfo)
 
     // Add requested dimensions from this cube to GROUP BY
     for (const dimensionName of query.dimensions || []) {
@@ -426,6 +443,19 @@ export class CTEBuilder {
     }
 
     return groupByFields
+  }
+
+  private addCorrelationKeyGroupBy(
+    addGroupByField: (col: any) => void,
+    cteInfo: CTEInfo
+  ): void {
+    for (const correlationSet of readCTECorrelationMetadata(cteInfo)?.correlationSets ?? []) {
+      for (const joinKey of correlationSet.joinKeys) {
+        if (joinKey.targetColumnObj) {
+          addGroupByField(joinKey.targetColumnObj)
+        }
+      }
+    }
   }
 
   /**
@@ -504,6 +534,14 @@ export class CTEBuilder {
       for (const joinKey of cteInfo.joinKeys) {
         const sourceCol = this.resolveCTEJoinSourceColumn(joinKey, cteInfo, queryPlan)
         const cteCol = sql`${sql.identifier(cteAlias)}.${sql.identifier(joinKey.targetColumn)}` // CTE column
+        conditions.push(eq(sourceCol as any, cteCol))
+      }
+    }
+
+    for (const correlationSet of readCTECorrelationMetadata(cteInfo)?.correlationSets ?? []) {
+      for (const joinKey of correlationSet.joinKeys) {
+        const sourceCol = this.resolveCTEJoinSourceColumn(joinKey, cteInfo, queryPlan)
+        const cteCol = sql`${sql.identifier(cteAlias)}.${sql.identifier(joinKey.targetColumn)}`
         conditions.push(eq(sourceCol as any, cteCol))
       }
     }

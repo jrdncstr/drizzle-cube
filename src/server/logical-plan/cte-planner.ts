@@ -25,6 +25,10 @@ import { ResolverCache, analyzeCubeUsage } from './planner-utils.js'
 import { FilterPropagation } from './filter-propagation.js'
 import type { JoinRef } from './types.js'
 import {
+  attachCTECorrelationMetadata,
+  deriveCTECorrelationMetadata
+} from '../cte-correlation-metadata.js'
+import {
   type CTEJoinKey,
   type FoundJoinInfo,
   collectDimensionCubeNames,
@@ -154,7 +158,7 @@ export class CTEPlanner {
     // Detect downstream cubes that need join keys in the CTE
     const downstreamJoinKeys = this.findDownstreamJoinKeys(cube, query, cubes)
 
-    return {
+    const cte = {
       cube,
       alias,
       cteAlias: `${cube.name.toLowerCase()}_agg`,
@@ -163,9 +167,22 @@ export class CTEPlanner {
       propagatingFilters: propagatingFilters.length > 0 ? propagatingFilters : undefined,
       downstreamJoinKeys: downstreamJoinKeys.length > 0 ? downstreamJoinKeys : undefined,
       intermediateJoins: intermediateJoins && intermediateJoins.length > 0 ? intermediateJoins : undefined,
-      cteType: 'aggregate',
+      cteType: 'aggregate' as const,
       cteReason
     }
+
+    const correlationMetadata = intermediateJoins && intermediateJoins.length > 0
+      ? undefined
+      : deriveCTECorrelationMetadata(
+          cubes,
+          cube,
+          query,
+          joinKeys,
+          this.resolverCache.get(cubes)
+        )
+    attachCTECorrelationMetadata(cte, correlationMetadata)
+
+    return cte
   }
 
   /**

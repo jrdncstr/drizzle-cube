@@ -5,8 +5,35 @@
 import { drizzle } from 'drizzle-orm/mysql2'
 import { migrate } from 'drizzle-orm/mysql2/migrator'
 import mysql from 'mysql2/promise'
-import { mysqlTestSchema as testSchema, employees, departments, productivity, timeEntries, analyticsPages, teams, employeeTeams, products, sales, inventory } from './schema'
+import { mysqlTestSchema as testSchema, employees, departments, productivity, timeEntries, analyticsPages, teams, employeeTeams, products, sales, inventory, rootInvariantParents, rootInvariantChildren, rootInvariantFacts } from './schema'
 import { enhancedDepartments, enhancedEmployees, enhancedTeams, enhancedEmployeeTeams, generateComprehensiveProductivityData, generateComprehensiveTimeEntriesData, enhancedProducts, enhancedSales, enhancedInventory } from '../../enhanced-test-data'
+
+const rootInvariantParentsData = [
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9101 },
+  { identityKey: 'parent-1', name: 'a1', organisationId: 9202 }
+]
+
+const rootInvariantChildrenData = [
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9101 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9101 },
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9101 },
+  { identityKey: 'child-1', parentKey: 'parent-1', name: 'b1', simpleCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', organisationId: 9202 },
+  { identityKey: 'child-2', parentKey: 'parent-1', name: 'b2', simpleCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', organisationId: 9202 },
+  { identityKey: 'child-3', parentKey: 'parent-1', name: 'b3', simpleCorrelationKey: 'correlation-3', compositeCorrelationKeyA: 'a3', compositeCorrelationKeyB: 'b3', organisationId: 9202 }
+]
+
+const rootInvariantFactsData = [
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '1', organisationId: 9101 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '2', organisationId: 9101 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '3', organisationId: 9101 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: '4', organisationId: 9101 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: '5', organisationId: 9101 },
+  { identityKey: 'fact-1', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '1', organisationId: 9202 },
+  { identityKey: 'fact-2', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '2', organisationId: 9202 },
+  { identityKey: 'fact-3', parentKey: 'parent-1', childCorrelationKey: 'correlation-1', compositeCorrelationKeyA: 'a1', compositeCorrelationKeyB: 'b1', amount: '3', organisationId: 9202 },
+  { identityKey: 'fact-4', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: '4', organisationId: 9202 },
+  { identityKey: 'fact-5', parentKey: 'parent-1', childCorrelationKey: 'correlation-2', compositeCorrelationKeyA: 'a2', compositeCorrelationKeyB: 'b2', amount: '5', organisationId: 9202 }
+]
 
 /**
  * Create MySQL connection for testing
@@ -39,7 +66,8 @@ export async function runMySQLMigrations(db: ReturnType<typeof drizzle>) {
     })
     console.log('MySQL migrations completed successfully')
   } catch (error) {
-    console.log('MySQL migrations completed or not needed:', (error as Error).message)
+    console.log('MySQL migrations error:', (error as Error).message)
+    throw error
   }
 }
 
@@ -201,7 +229,20 @@ export async function setupMySQLTestData(db: ReturnType<typeof drizzle>) {
   // Insert inventory (fact table #2)
   await db.insert(inventory).values(updatedInventory)
 
+  await reseedMySQLRootInvariantFixture(db)
+
   console.log('Star schema test data inserted successfully')
+}
+
+export async function reseedMySQLRootInvariantFixture(db: ReturnType<typeof drizzle>) {
+  await db.transaction(async transaction => {
+    await transaction.delete(rootInvariantFacts)
+    await transaction.delete(rootInvariantChildren)
+    await transaction.delete(rootInvariantParents)
+    await transaction.insert(rootInvariantParents).values(rootInvariantParentsData)
+    await transaction.insert(rootInvariantChildren).values(rootInvariantChildrenData)
+    await transaction.insert(rootInvariantFacts).values(rootInvariantFactsData)
+  })
 }
 
 /**
