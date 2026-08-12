@@ -550,8 +550,9 @@ describe(`Logical Plan Pipeline (${dbType})`, () => {
         query,
         { organisationId: 9101 }
       )
-      const childJoinIndex = sqlResult.sql.indexOf('join "root_invariant_children"')
-      const factJoinIndex = sqlResult.sql.indexOf('join "c_agg"')
+      // Identifier quoting differs per engine (double quotes vs backticks), so match either.
+      const childJoinIndex = sqlResult.sql.search(/join\s+["`]root_invariant_children["`]/i)
+      const factJoinIndex = sqlResult.sql.search(/join\s+["`]c_agg["`]/i)
 
       expect(childJoinIndex).toBeGreaterThan(-1)
       expect(factJoinIndex).toBeGreaterThan(childJoinIndex)
