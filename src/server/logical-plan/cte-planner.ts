@@ -173,9 +173,12 @@ export class CTEPlanner {
     )
 
     // Detect downstream cubes that need join keys in the CTE
-    const downstreamJoinKeys = this
-      .findDownstreamJoinKeys(cube, query, cubes)
-      .filter(downstream => !correlatedCubeNames.has(downstream.targetCubeName))
+    const downstreamJoinKeys = this.findDownstreamJoinKeys(
+      cube,
+      query,
+      cubes,
+      correlatedCubeNames
+    )
 
     const cte = {
       cube,
@@ -485,7 +488,8 @@ export class CTEPlanner {
   private findDownstreamJoinKeys(
     cteCube: Cube,
     query: SemanticQuery,
-    _allCubes: Map<string, Cube>
+    _allCubes: Map<string, Cube>,
+    correlatedCubeNames: Set<string>
   ): Array<{ targetCubeName: string; joinKeys: CTEJoinKey[] }> {
     const downstreamJoinKeys: Array<{ targetCubeName: string; joinKeys: CTEJoinKey[] }> = []
 
@@ -503,7 +507,10 @@ export class CTEPlanner {
       if (!targetCube) continue
       const targetCubeName = targetCube.name
 
-      if (dimensionCubeNames.has(targetCubeName)) {
+      if (
+        dimensionCubeNames.has(targetCubeName)
+        && (!correlatedCubeNames.has(targetCubeName) || joinDef.relationship === 'belongsToMany')
+      ) {
         downstreamJoinKeys.push({
           targetCubeName,
           joinKeys: deriveDownstreamJoinKeys(joinDef as CubeJoin)
